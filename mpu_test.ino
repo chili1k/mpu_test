@@ -20,6 +20,8 @@ void setup(){
   pinMode(BUTTON_PIN, INPUT);
   btnDbn.attach(BUTTON_PIN);
   btnDbn.interval(20);
+
+  Serial.println("Press button to read from gyro ...");
 }
 
 void showGyro() {

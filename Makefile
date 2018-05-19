@@ -6,6 +6,6 @@ AVR_TOOLS_DIR = $(ARDUINO_DIR)/hardware/tools/avr
 BOARD_TAG    = uno
 MONITOR_PORT = /dev/cu.usbmodemFA131
 MONITOR_BAUDRATE = 115200
-ARDUINO_LIBS += Wire
+ARDUINO_LIBS += Wire Bounce2
 
 include /usr/local/opt/arduino-mk/Arduino.mk

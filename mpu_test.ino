@@ -4,6 +4,7 @@
 #define MPU_ADDR 0x68  // I2C address of the MPU-6050
 #define MAX_ITERS 100
 #define BUTTON_PIN 3
+#define PRINT_DELAY 1000
 
 int16_t AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
 Bounce btnDbn;
@@ -59,6 +60,10 @@ void showGyro() {
 }
 
 void loop(){
+  showGyro();
+  delay(PRINT_DELAY);
+
+  /*
   btnDbn.update();
   bool pushed = btnDbn.read();
 
@@ -70,4 +75,5 @@ void loop(){
     isAlreadyPushed = true;
     showGyro();
   }
+  */
 }

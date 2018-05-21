@@ -3,29 +3,55 @@
 
 #define MPU_ADDR 0x68  // I2C address of the MPU-6050
 #define MAX_ITERS 100
-#define BUTTON_PIN 3
+#define PIN_BUTTON_1 3
+#define PIN_BUTTON_2 4
 #define PRINT_DELAY 1000
 
+#define PRINT_CSV_ITEM(x) Serial.print(x); Serial.print(",");
+#define PRINT_LAST_CSV_ITEM(x) Serial.print(x); Serial.println();
+
 int16_t AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
-Bounce btnDbn;
-bool isAlreadyPushed;
+Bounce button1;
+Bounce button2;
+
+unsigned long lastUpdateTime = 0;
+unsigned long time = 0;
+
+bool wasButton1Pushed;
+bool wasButton2Pushed;
 
 void setup(){
   Wire.begin();
+  Wire.setClock(100000);
   Wire.beginTransmission(MPU_ADDR);
   Wire.write(0x6B);  // PWR_MGMT_1 register
   Wire.write(0);     // set to zero (wakes up the MPU-6050)
   Wire.endTransmission(true);
   Serial.begin(115200);
 
-  pinMode(BUTTON_PIN, INPUT);
-  btnDbn.attach(BUTTON_PIN);
-  btnDbn.interval(20);
+  pinMode(PIN_BUTTON_1, INPUT);
+  button1.attach(PIN_BUTTON_1);
+  button1.interval(20);
 
-  Serial.println("Press button to read from gyro ...");
+  pinMode(PIN_BUTTON_2, INPUT);
+  button2.attach(PIN_BUTTON_2);
+  button2.interval(20);
+
+  // csv header
+  Serial.println("Tm,Btn1,Btn2,AcX,AcY,AcZ,GyX,GyY,GyZ");
 }
 
-void showGyro() {
+void printCsvItem(bool isLastItem) {
+  Serial.print(AcX);
+  Serial.print(",");
+}
+
+void printLastCsvItem() {
+  Serial.print(AcX);
+  Serial.println();
+}
+
+void printGyro() {
   Wire.beginTransmission(MPU_ADDR);
   Wire.write(0x3B);  // starting with register 0x3B (ACCEL_XOUT_H)
   Wire.endTransmission(false);
@@ -50,30 +76,36 @@ void showGyro() {
   GyY/=MAX_ITERS;
   GyZ/=MAX_ITERS;
 
-  Serial.print("AcX = "); Serial.print(AcX);
-  Serial.print(" | AcY = "); Serial.print(AcY);
-  Serial.print(" | AcZ = "); Serial.print(AcZ);
-  Serial.print(" | Tmp = "); Serial.print(Tmp/340.00+36.53);  //equation for temperature in degrees C from datasheet
-  Serial.print(" | GyX = "); Serial.print(GyX);
-  Serial.print(" | GyY = "); Serial.print(GyY);
-  Serial.print(" | GyZ = "); Serial.println(GyZ);
+  int btn1 = wasButton1Pushed ? 1 : 0;
+  int btn2 = wasButton2Pushed ? 1 : 0;
+
+  PRINT_CSV_ITEM(time);
+  PRINT_CSV_ITEM(btn1);
+  PRINT_CSV_ITEM(btn2);
+  PRINT_CSV_ITEM(AcX);
+  PRINT_CSV_ITEM(AcY);
+  PRINT_CSV_ITEM(AcZ);
+  //PRINT_CSV_ITEM(Tmp/340.00+36.53);  //equation for temperature in degrees C from datasheet
+  PRINT_CSV_ITEM(GyX);
+  PRINT_CSV_ITEM(GyY);
+  PRINT_LAST_CSV_ITEM(GyZ);
 }
 
 void loop(){
-  showGyro();
-  delay(PRINT_DELAY);
+  button1.update();
+  button2.update();
+  // if button was pressed at any point during the last interval
+  wasButton1Pushed = wasButton1Pushed || button1.read();
+  wasButton2Pushed = wasButton2Pushed || button2.read();
 
-  /*
-  btnDbn.update();
-  bool pushed = btnDbn.read();
+  unsigned long now = millis();
 
-  if (!pushed && isAlreadyPushed) {
-    isAlreadyPushed = false;
+  if ((now - lastUpdateTime) >= PRINT_DELAY) {
+    printGyro();
+
+    lastUpdateTime = now;
+    wasButton1Pushed = false;
+    wasButton2Pushed = false;
+    time++;
   }
-
-  if (pushed && !isAlreadyPushed) {
-    isAlreadyPushed = true;
-    showGyro();
-  }
-  */
 }

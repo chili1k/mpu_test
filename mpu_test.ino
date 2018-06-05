@@ -1,3 +1,4 @@
+#include <avr/wdt.h>
 #include <Bounce2.h>
 #include "I2Cdev.h"
 #include "MPU6050_6Axis_MotionApps20.h"
@@ -6,6 +7,7 @@
 #define PIN_BUTTON_1 3
 #define PIN_BUTTON_2 4
 #define PRINT_DELAY 1000
+#define INTERRUPT_TIMEOUT 2000
 
 #define PRINT_CSV_ITEM(x) Serial.print(x); Serial.print(",");
 #define PRINT_LAST_CSV_ITEM(x) Serial.print(x); Serial.println();
@@ -33,11 +35,15 @@ bool wasButton1Pushed;
 bool wasButton2Pushed;
 
 volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
+volatile unsigned long lastInterruptTime;
 void dmpDataReady() {
     mpuInterrupt = true;
+    lastInterruptTime = millis();
 }
 
 void setup() {
+  wdt_enable(WDTO_4S);
+
   pinMode(PIN_BUTTON_1, INPUT);
   button1.attach(PIN_BUTTON_1);
   button1.interval(20);
@@ -51,7 +57,7 @@ void setup() {
   Wire.setClock(100000); 
   mpu.initialize();
 
-  Serial.begin(115200);
+  Serial.begin(9600);
   Serial.println(F("Initializing I2C devices..."));
   Serial.println(F("Testing device connections..."));
   Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
@@ -82,17 +88,26 @@ void setup() {
     dmpReady = true;
 
     packetSize = mpu.dmpGetFIFOPacketSize();
+    Serial.print(F("FIFO packet size: "));
+    Serial.println(packetSize);
   } else {
     Serial.print(F("DMP Initialization failed (code "));
     Serial.print(devStatus);
     Serial.println(F(")"));
   }
 
+  lastInterruptTime = millis();
+
   // csv header
   Serial.println("Tm,Btn1,Btn2,yaw,pitch,roll,qw,qx,qy,qz");
 }
 
 void printGyro() {
+  if ((millis() - lastInterruptTime) >= INTERRUPT_TIMEOUT) {
+    Serial.println(F("Error. No data from i2c seen for 2 seconds."));
+    return;
+  }
+
   int btn1 = wasButton1Pushed ? 1 : 0;
   int btn2 = wasButton2Pushed ? 1 : 0;
   PRINT_CSV_ITEM(time);
@@ -107,8 +122,52 @@ void printGyro() {
   PRINT_LAST_CSV_ITEM(q.z);
 }
 
-void loop() {
+void readGyro() {
+  wdt_reset();
+  
   if (!dmpReady) return;
+
+  // no data yet
+  if (!mpuInterrupt) {
+    return;
+  }
+
+  // reset interrupt flag and get INT_STATUS byte
+  mpuInterrupt = false;
+  fifoCount = mpu.getFIFOCount();
+
+  if (fifoCount == 0) {
+    Serial.println(F("FIFO count 0"));
+  } else if (fifoCount == 1024) {
+    Serial.println(F("FIFO overflow"));
+    mpu.resetFIFO();
+    Serial.println(F("FIFO reset"));
+  } else { 
+    if (fifoCount % packetSize != 0) {
+      Serial.print(F("Packet is corrupted. Fifo count: "));
+      Serial.println(fifoCount);
+      mpu.resetFIFO();
+    } else {
+      //Serial.print(F("Reading packets. Fifo count: "));
+      //Serial.println(fifoCount);
+      while (fifoCount >= packetSize) {
+        mpu.getFIFOBytes(fifoBuffer, packetSize);
+        fifoCount -= packetSize;
+      }
+
+
+      //Serial.println(F("Get quaternion"));
+      mpu.dmpGetQuaternion(&q, fifoBuffer);
+      //Serial.println(F("Get gravity"));
+      mpu.dmpGetGravity(&gravity, &q);
+      //Serial.println(F("Get ypr"));
+      mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+    }
+  }
+}
+
+void loop() {
+  readGyro();
 
   button1.update();
   button2.update();
@@ -125,32 +184,5 @@ void loop() {
     wasButton1Pushed = false;
     wasButton2Pushed = false;
     time++;
-  }
-
-  // no data yet
-  if (!mpuInterrupt) {
-    return;
-  }
-
-  // reset interrupt flag and get INT_STATUS byte
-  mpuInterrupt = false;
-  fifoCount = mpu.getFIFOCount();
-
-  if (fifoCount == 1024) {
-    mpu.resetFIFO();
-    Serial.println(F("FIFO overflow!"));
-  } else { 
-    if (fifoCount % packetSize != 0) {
-      mpu.resetFIFO();
-//      Serial.println(F("Packet is corrupted!"));
-    } else {
-      while (fifoCount >= packetSize) {
-        mpu.getFIFOBytes(fifoBuffer, packetSize);
-        fifoCount -= packetSize;
-      }
-      mpu.dmpGetQuaternion(&q, fifoBuffer);
-      mpu.dmpGetGravity(&gravity, &q);
-      mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-    }
   }
 }

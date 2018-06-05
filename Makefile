@@ -5,7 +5,7 @@ AVR_TOOLS_DIR = $(ARDUINO_DIR)/hardware/tools/avr
 #BOARD_SUB    = atmega2560
 BOARD_TAG    = uno
 MONITOR_PORT = /dev/cu.usbmodemFA131
-MONITOR_BAUDRATE = 115200
+MONITOR_BAUDRATE = 9600
 ARDUINO_LIBS += MPU6050 I2Cdev Wire Bounce2
 
 include /usr/local/opt/arduino-mk/Arduino.mk
